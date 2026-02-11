@@ -10,7 +10,6 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.faulk.appkiller.ui.MainActivity
 
 class AppKillerAccessibilityService : AccessibilityService() {
@@ -21,9 +20,8 @@ class AppKillerAccessibilityService : AccessibilityService() {
         const val ACTION_ABORT_KILL = "ACTION_ABORT_KILL"
         const val EXTRA_PACKAGES = "EXTRA_PACKAGES"
 
-        // Actions for broadcasting progress to the UI
-        const val ACTION_PROGRESS_UPDATE = "ACTION_PROGRESS_UPDATE"
-        const val ACTION_KILL_PROCESS_FINISHED = "ACTION_KILL_PROCESS_FINISHED"
+        const val ACTION_PROGRESS_UPDATE = "com.faulk.appkiller.PROGRESS_UPDATE"
+        const val ACTION_KILL_PROCESS_FINISHED = "com.faulk.appkiller.KILL_FINISHED"
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -47,7 +45,6 @@ class AppKillerAccessibilityService : AccessibilityService() {
                 }
             }
             ACTION_ABORT_KILL -> {
-                Log.d(TAG, "Abort command received.")
                 finishKillingProcess(isAborted = true)
             }
         }
@@ -55,50 +52,40 @@ class AppKillerAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (!isKilling || rootInActiveWindow == null) return
+        if (!isKilling) return
+        
+        // FIX: Added safer null check for rootInActiveWindow
+        val rootNode = rootInActiveWindow ?: return
 
-        // We are interested in window changes, which occur when App Info or dialogs appear.
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val rootNode = rootInActiveWindow ?: return
-            Log.d(TAG, "Event from package: ${event.packageName}, class: ${event.className}")
-
-            // Step 2: Look for "OK" confirmation after clicking "Force Stop"
-            // The confirmation dialog is usually a simple alert.
+            // Step 2: Look for "OK" or "Force stop" confirmation dialog
+            // Note: Different Android versions use different IDs for the OK button
             val okButton = findNode(rootNode, "OK", "android:id/button1")
             if (okButton != null && okButton.isEnabled) {
-                handler.removeCallbacks(timeoutRunnable) // Progress made
-                Log.d(TAG, "Clicking 'OK' confirmation button.")
+                handler.removeCallbacks(timeoutRunnable)
                 okButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                // Give a short delay for the settings window to close before moving to the next app.
                 handler.postDelayed({ proceedToNextApp() }, 500)
-                rootNode.recycle()
                 return
             }
 
-            // Step 1: Look for the "Force Stop" button on the App Info screen.
+            // Step 1: Look for "Force stop" button on App Info page
             val forceStopButton = findNode(rootNode, "Force stop", "com.android.settings:id/force_stop_button")
             if (forceStopButton != null && forceStopButton.isEnabled) {
-                handler.removeCallbacks(timeoutRunnable) // Progress made
-                Log.d(TAG, "Clicking 'Force Stop' button.")
+                handler.removeCallbacks(timeoutRunnable)
                 forceStopButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                // Set a new, shorter timeout for the "OK" dialog to appear.
                 handler.postDelayed(timeoutRunnable, 2000)
-                rootNode.recycle()
                 return
             }
-            rootNode.recycle()
         }
     }
 
     private fun startKillingProcess(packages: ArrayList<String>) {
-        if (isKilling) return
         isKilling = true
         killQueue.clear()
         killQueue.addAll(packages)
         totalAppsToKill = killQueue.size
         currentAppRetries = 0
         buildAppNameMap()
-        Log.d(TAG, "Starting kill process for ${killQueue.size} apps.")
         openNextAppSettings()
     }
 
@@ -112,20 +99,16 @@ class AppKillerAccessibilityService : AccessibilityService() {
         val packageName = killQueue.first()
         broadcastProgress()
 
-        Log.d(TAG, "Opening settings for: $packageName")
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.fromParts("package", packageName, null)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
-
-        // Set a timeout. If nothing happens in 5 seconds, we're likely stuck.
         handler.postDelayed(timeoutRunnable, 5000)
     }
 
     private fun proceedToNextApp() {
         handler.removeCallbacks(timeoutRunnable)
-        currentAppRetries = 0
         if (killQueue.isNotEmpty()) {
             killQueue.removeAt(0)
         }
@@ -133,61 +116,48 @@ class AppKillerAccessibilityService : AccessibilityService() {
     }
 
     private fun handleTimeout() {
-        val stuckPackage = killQueue.firstOrNull() ?: "Unknown"
-        Log.w(TAG, "Timeout while processing $stuckPackage. Retries: $currentAppRetries")
-        if (currentAppRetries < 1) { // Retry once
+        if (currentAppRetries < 1) {
             currentAppRetries++
             openNextAppSettings()
         } else {
-            Log.e(TAG, "Max retries reached for $stuckPackage. Skipping.")
             proceedToNextApp()
         }
     }
 
     private fun finishKillingProcess(isAborted: Boolean) {
         if (!isKilling && !isAborted) return
-        Log.d(TAG, "Finishing kill process. Aborted: $isAborted")
         isKilling = false
         killQueue.clear()
-        packageNamesToAppNames.clear()
-        handler.removeCallbacksAndMessages(null) // Clear all pending operations
-
+        handler.removeCallbacksAndMessages(null)
         broadcastFinish()
 
-        // Bring the main activity back to the front.
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         startActivity(intent)
     }
 
-    // Helper to find a clickable node by text or resource ID, making it more robust.
     private fun findNode(root: AccessibilityNodeInfo, text: String, resourceId: String): AccessibilityNodeInfo? {
-        // First try by text (case-insensitive)
-        val byText = root.findAccessibilityNodeInfosByText(text).firstOrNull { it.isClickable }
-        if (byText != null) return byText
-
-        // Fallback to resource ID
-        val byId = root.findAccessibilityNodeInfosByViewId(resourceId).firstOrNull { it.isClickable }
+        // Search by ID first (more reliable)
+        val byId = root.findAccessibilityNodeInfosByViewId(resourceId).firstOrNull { it.isEnabled }
         if (byId != null) return byId
 
-        return null
+        // Search by text
+        val byText = root.findAccessibilityNodeInfosByText(text).firstOrNull { it.isEnabled }
+        return byText
     }
 
-    // Caches app names to avoid querying package manager repeatedly.
     private fun buildAppNameMap() {
         packageNamesToAppNames.clear()
         killQueue.forEach { pkg ->
             try {
                 val appInfo = packageManager.getApplicationInfo(pkg, 0)
                 packageNamesToAppNames[pkg] = packageManager.getApplicationLabel(appInfo).toString()
-            } catch (e: PackageManager.NameNotFoundException) {
-                packageNamesToAppNames[pkg] = pkg // Fallback to package name
+            } catch (e: Exception) {
+                packageNamesToAppNames[pkg] = pkg
             }
         }
     }
-
-    // --- Broadcasting to UI ---
 
     private fun broadcastProgress() {
         val currentPackage = killQueue.firstOrNull() ?: return
@@ -196,22 +166,20 @@ class AppKillerAccessibilityService : AccessibilityService() {
             putExtra("current_app", appName)
             putExtra("current_count", (totalAppsToKill - killQueue.size) + 1)
             putExtra("total_count", totalAppsToKill)
+            // FIX: Important for Android 14+
+            setPackage(packageName) 
         }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        sendBroadcast(intent)
     }
 
     private fun broadcastFinish() {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_KILL_PROCESS_FINISHED))
+        val intent = Intent(ACTION_KILL_PROCESS_FINISHED).apply {
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
     }
 
     override fun onInterrupt() {
-        Log.w(TAG, "Accessibility service interrupted.")
         finishKillingProcess(isAborted = true)
-    }
-
-    override fun onUnbind(intent: Intent?): Boolean {
-        Log.w(TAG, "Accessibility service unbound.")
-        finishKillingProcess(isAborted = true)
-        return super.onUnbind(intent)
     }
 }
