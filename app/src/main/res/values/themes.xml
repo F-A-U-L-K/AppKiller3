@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">AppKiller</string>
-
     <!-- Material 3 Theme -->
     <style name="Theme.AppKiller" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
