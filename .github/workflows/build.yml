@@ -1,5 +1,6 @@
-name: Build APK
-
+- name: Build Debug APK
+        # Use 'gradle' instead of './gradlew' to bypass the missing .jar file
+        run: gradle assembleDebug
 on:
   push:
     branches: [ main ]
