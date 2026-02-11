@@ -46,7 +46,6 @@ class MainActivity : AppCompatActivity() {
         binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
-                // Lazy-load system apps when the user swipes to the tab.
                 if (position == 1) {
                     viewModel.loadSystemApps()
                 }
@@ -55,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
+        // FIX: Explicitly defined the type so the compiler doesn't fail inference
         viewModel.categorizedApps.observe(this) { categorized ->
             val userCount = categorized.userApps.count { it.isSelected }
             val systemCount = categorized.systemApps.count { it.isSelected }
@@ -68,9 +68,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.isLoadingUserApps.observe(this) { isLoading ->
-            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+            binding.progressBar.visibility = if (isLoading == true) View.VISIBLE else View.GONE
         }
-        // Note: We don't show a main progress bar for system apps as they load in their own tab.
     }
 
     private fun setupClickListeners() {
@@ -85,16 +84,17 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // Start the Killing Progress Activity and pass the list to the service
+            // FIX: Resolved the 'Overload resolution ambiguity' error at Line 90
             val intent = Intent(this, KillingProgressActivity::class.java).apply {
-                putStringArrayListExtra(AppKillerAccessibilityService.EXTRA_PACKAGES, ArrayList(selectedPackages))
+                val arrayListPackages = ArrayList<String>()
+                arrayListPackages.addAll(selectedPackages)
+                putStringArrayListExtra(AppKillerAccessibilityService.EXTRA_PACKAGES, arrayListPackages)
             }
             startActivity(intent)
         }
         
         binding.btnRefresh.setOnClickListener {
             viewModel.loadUserApps()
-            // The system apps list will be refreshed if the user navigates to it again.
         }
     }
 
@@ -102,17 +102,14 @@ class MainActivity : AppCompatActivity() {
         when {
             !hasUsageStatsPermission() -> showPermissionDialog(
                 "Usage Access Required",
-                "App Killer needs 'Usage Access' to find recently used apps. Please grant the permission in the next screen.",
+                "App Killer needs 'Usage Access' to find recently used apps.",
                 Settings.ACTION_USAGE_ACCESS_SETTINGS
             )
             !isAccessibilityServiceEnabled() -> showPermissionDialog(
                 "Accessibility Service Required",
-                "App Killer needs this core permission to automate the hibernation process. Your data is not collected.",
+                "App Killer needs this to automate the hibernation process.",
                 Settings.ACTION_ACCESSIBILITY_SETTINGS
             )
-            else -> {
-                // Permissions are granted, apps will be loaded by the ViewModel's init block.
-            }
         }
     }
 
@@ -127,7 +124,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
-        val service = "$packageName/${AppKillerAccessibilityService::class.java.canonicalName}"
+        val service = "$packageName/${AppKillerAccessibilityService::class.java.name}"
         val enabledServices = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
         return enabledServices?.contains(service) == true
     }
