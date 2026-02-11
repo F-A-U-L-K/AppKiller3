@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AppKiller</string>
+    <string name="accessibility_description">This service automates force-closing apps to optimize performance.</string>
+</resources>
