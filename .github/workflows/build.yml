@@ -9,7 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +18,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
+                # THIS IS THE FIX: It creates the missing .jar file automatically
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
