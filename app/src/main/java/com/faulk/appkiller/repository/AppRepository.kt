@@ -55,7 +55,7 @@ class AppRepository(private val context: Context) {
                 appName = app.loadLabel(packageManager).toString(),
                 packageName = app.packageName,
                 icon = app.loadIcon(packageManager),
-                lastUsedTimestamp = usageStats.lastTimeUsed,
+                lastUsedTimestamp = usageStats?.lastTimeUsed ?: 0L,
                 type = currentAppType,
                 // De-select critical apps by default.
                 isSelected = !criticalSystemPackages.contains(app.packageName)
