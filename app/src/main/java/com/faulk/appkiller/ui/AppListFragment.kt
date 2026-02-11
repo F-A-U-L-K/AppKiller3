@@ -1,10 +1,10 @@
 package com.faulk.appkiller.ui
 
+import androidx.fragment.app.Fragment
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.faulk.appkiller.adapter.AppAdapter
@@ -20,7 +20,7 @@ class AppListFragment : Fragment() {
     // FIX: Using activityViewModels() ensures this Fragment shares the same 
     // data instance as MainActivity
     private val viewModel: AppKillerViewModel by activityViewModels()
-    
+
     private lateinit var appAdapter: AppAdapter
 
     override fun onCreateView(
