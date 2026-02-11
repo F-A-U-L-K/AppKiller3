@@ -6,7 +6,9 @@ plugins {
 android {
     namespace 'com.faulk.appkiller'
     compileSdk 34
-
+buildFeatures {
+        viewBinding true
+    }
     defaultConfig {
         applicationId "com.faulk.appkiller"
         minSdk 26
