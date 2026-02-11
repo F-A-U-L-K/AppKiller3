@@ -32,4 +32,8 @@
 
     <!-- Status Bar -->
     <color name="status_bar">#FAFAFA</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="surface_dark">#121212</color>
+    <color name="radar_green">#00FF00</color> <color name="purple_500">#6200EE</color>
 </resources>
